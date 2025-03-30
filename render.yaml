@@ -6,4 +6,8 @@ services:
     startCommand: "python bot.py"
     envVars:
       - key: BOT_TOKEN
-        value: твій_токен_бота
+        sync: false # Це означає, що значення токена буде встановлено вручну через інтерфейс Render
+      - key: PORT
+        value: 8080
+      - key: WEBHOOK_URL
+        sync: false # Це також буде встановлено вручну, після створення сервісу
