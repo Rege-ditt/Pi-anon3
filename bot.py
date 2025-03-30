@@ -48,7 +48,7 @@ reply_markup = InlineKeyboardMarkup(keyboard)
 
 await context.bot.send_message(
     chat_id=ADMIN_ID,
-    text=f"📬 Нове анонімне повідомлення:
+    text="📬 Нове анонімне повідомлення:
 
 {message_text}",
 reply_markup=reply_markup
