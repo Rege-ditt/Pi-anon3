@@ -33,54 +33,45 @@ user_data[user.id] = {
 'last_name': user.last_name
 }
 await update.message.reply_text(
-    "Вітаю! Надішліть повідомлення, і я перешлю його анонімно👀!                                                                                                   ░🎉Просто надішліть текст, і я перешлю його АНОНІМНО░🎉" ###jnenfooooooooooooooooooooooooooooooooooooooooooooo
+"Вітаю! Надішліть повідомлення, і я перешлю його анонімно👀!\n"
+"🎉 Просто надішліть текст, і я перешлю його АНОНІМНО 🎉"
 )
-
 async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
 user = update.effective_user
 message_text = update.message.text
 user_data[user.id] = {
-    'last_message': message_text
+'last_message': message_text
 }
-
 keyboard = [[InlineKeyboardButton("Відповісти анонімно", callback_data=f"reply_{user.id}")]]
 reply_markup = InlineKeyboardMarkup(keyboard)
 
 await context.bot.send_message(
     chat_id=ADMIN_ID,
-    text="📬 Нове анонімне повідомлення:
-
-{message_text}",
-reply_markup=reply_markup
+    text=f"📬 Нове анонімне повідомлення:\n\n{message_text}",
+    reply_markup=reply_markup
 )
-await update.message.reply_text("✅ Ваше  повідомлення отримано і буде переслано анонімно✨!")
+await update.message.reply_text("✅ Ваше повідомлення отримано і буде переслано анонімно✨!")
 
 async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 query = update.callback_query
 await query.answer()
 if query.data.startswith("reply_"):
-    user_id = int(query.data.split("_")[1])
-    context.user_data["reply_to"] = user_id
-    
-    await query.edit_message_text(
-        text=f"Введіть відповідь для анонімного користувача."
-    )
-    return AWAITING_REPLY
-
+user_id = int(query.data.split("_")[1])
+context.user_data["reply_to"] = user_id
+await query.edit_message_text(
+text="Введіть відповідь для анонімного користувача."
+)
+return AWAITING_REPLY
 return ConversationHandler.END
-
 async def reply_to_user(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 reply_text = update.message.text
 reply_to_id = context.user_data.get("reply_to")
 if not reply_to_id:
-    await update.message.reply_text("❌ Помилка: Не знайдено одержувача.")
-    return ConversationHandler.END
-
+await update.message.reply_text("❌ Помилка: Не знайдено одержувача.")
+return ConversationHandler.END
 await context.bot.send_message(
     chat_id=reply_to_id,
-    text=f"📨 Вам надійшла анонімна відповідь:
-
-{reply_text}"
+    text=f"📨 Вам надійшла анонімна відповідь:\n\n{reply_text}"
 )
 await update.message.reply_text("✅ Відповідь успішно надіслана🍓!")
 return ConversationHandler.END
