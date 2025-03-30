@@ -11,14 +11,14 @@ format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
 level=logging.DEBUG
 )
 logger = logging.getLogger(name)
-Токен та ID адміністратора
+#Токен та ID адміністратора#
 TOKEN = "7903591351:AAH9zNPCwh4eTXMuMWQa1T0EwV5xgemwjds"
 ADMIN_ID = 6085114476
-Стани для ConversationHandler
+#Стани для ConversationHandler#
 AWAITING_REPLY = 1
-Зберігаємо інформацію про користувачів
+#Зберігаємо інформацію про користувачів#
 user_data = {}
-Flask додаток для обходу перевірки портів
+#Flask додаток для обходу перевірки портів#
 app = Flask(name)
 @app.route('/')
 def health_check():
