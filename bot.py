@@ -33,8 +33,7 @@ user_data[user.id] = {
 'last_name': user.last_name
 }
 await update.message.reply_text(
-    "Вітаю! Надішліть повідомлення, і я перешлю його анонімно👀!
-    ░🎉Просто надішліть текст, і я перешлю його АНОНІМНО░🎉" ###jnenfooooooooooooooooooooooooooooooooooooooooooooo
+    "Вітаю! Надішліть повідомлення, і я перешлю його анонімно👀!                                                                                                   ░🎉Просто надішліть текст, і я перешлю його АНОНІМНО░🎉" ###jnenfooooooooooooooooooooooooooooooooooooooooooooo
 )
 
 async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
