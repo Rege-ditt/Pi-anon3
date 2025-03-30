@@ -2,11 +2,13 @@ import logging
 import os
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackQueryHandler, ContextTypes, ConversationHandler
+import asyncio
+from flask import Flask, request
 
-# Налаштування логування - збільшуємо рівень деталізації
+# Налаштування логування
 logging.basicConfig(
     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    level=logging.DEBUG  # Змінено з INFO на DEBUG для більш детальних логів
+    level=logging.DEBUG
 )
 logger = logging.getLogger(__name__)
 
@@ -14,16 +16,25 @@ logger = logging.getLogger(__name__)
 TOKEN = "7903591351:AAH9zNPCwh4eTXMuMWQa1T0EwV5xgemwjds"
 ADMIN_ID = 6085114476
 
+# Для роботи на Render
+PORT = int(os.environ.get('PORT', 8080))
+WEBHOOK_URL = os.environ.get('WEBHOOK_URL', 'https://your-app-name.onrender.com')
+
 # Стани для ConversationHandler
 AWAITING_MESSAGE = 0
 AWAITING_REPLY = 1
 
 # Зберігаємо інформацію про користувачів
 user_data = {}
+# Зберігаємо повідомлення для відстеження ланцюжків відповідей
+messages_data = {}
 
 # Повідомлення при запуску скрипта
 print(f"Запуск бота з токеном: {TOKEN[:5]}...{TOKEN[-5:]}")
 print(f"ID адміністратора: {ADMIN_ID}")
+
+# Створюємо Flask застосунок для вебхуку
+flask_app = Flask(__name__)
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Початкова команда."""
@@ -45,7 +56,8 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     # Відправляємо вітальне повідомлення користувачеві
     await update.message.reply_text(
         "Вітаю! Це бот для анонімних повідомлень👀.\n\n"
-        "░🎉Просто надішліть текст, і я перешлю його анонімно🎉░."
+        "░🎉Просто надішліть текст, і я перешлю його анонімно🎉░.\n\n"
+        "Тепер ви також можете відповідати на анонімні повідомлення, які отримуєте."
     )
     
     # Повідомляємо адміністратора про нового користувача
@@ -57,6 +69,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     except Exception as e:
         logger.error(f"Не вдалося надіслати повідомлення адміністратору: {e}")
         print(f"Помилка надсилання повідомлення адміністратору: {e}")
+
+async def get_message_id():
+    """Генерує унікальний ID для повідомлення."""
+    return f"msg_{len(messages_data) + 1}"
 
 async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
     """Обробка повідомлень від користувачів."""
@@ -80,35 +96,66 @@ async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     logger.info(f"ПОВІДОМЛЕННЯ: Від користувача {user_info}\nТекст: {message_text}")
     print(f"ПОВІДОМЛЕННЯ: Від користувача {user_info}\nТекст: {message_text}")
     
+    # Генеруємо ID для цього повідомлення
+    message_id = await get_message_id()
+    
+    # Зберігаємо інформацію про повідомлення
+    messages_data[message_id] = {
+        'sender_id': user.id,
+        'text': message_text,
+        'timestamp': update.message.date
+    }
+    
     # Повідомляємо користувача про отримання
     await update.message.reply_text(
-        "✅ Ваше повідомлення отримано і буде анонімно переслано вказаному контакту✨ (⚠️ На жаль, функція відповіді на надіслане Вам анонімне повідомлення зараз недоступна😭) ."
+        "✅ Ваше повідомлення отримано і буде анонімно переслано."
     )
     
     # Створюємо кнопки для відповіді на повідомлення
     keyboard = [
-        [InlineKeyboardButton("Відповісти анонімно", callback_data=f"reply_{user.id}")]
+        [InlineKeyboardButton("Відповісти анонімно", callback_data=f"reply_{message_id}")]
     ]
     reply_markup = InlineKeyboardMarkup(keyboard)
     
-    # Пересилаємо повідомлення адміністратору
+    # Пересилаємо повідомлення адміністратору та для відповіді
     try:
-        # Надсилаємо інформацію про відправника (тільки адміністратору)
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"📬 Нове анонімне повідомлення!\n\n"
-                 f"Інформація про відправника (конфіденційно):\n{user_info}"
-        )
+        # Надсилаємо інформацію про відправника адміністратору (конфіденційно)
+        if ADMIN_ID != user.id:  # Не надсилаємо адміну інформацію про себе
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"📬 Нове анонімне повідомлення!\n\n"
+                    f"Інформація про відправника (конфіденційно):\n{user_info}"
+            )
+            
+            # Надсилаємо саме повідомлення з кнопкою для відповіді
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"📝 Текст анонімного повідомлення:\n\n{message_text}",
+                reply_markup=reply_markup
+            )
         
-        # Надсилаємо саме повідомлення з кнопкою для відповіді
-        await context.bot.send_message(
-            chat_id=ADMIN_ID,
-            text=f"📝 Текст анонімного повідомлення:\n\n{message_text}",
-            reply_markup=reply_markup
-        )
+        # Вибираємо отримувача повідомлення
+        # Тут можна реалізувати логіку адресації повідомлень
+        # Зараз всі повідомлення йдуть адміністратору
+        recipient_id = ADMIN_ID
+        
+        # Якщо відправник - адміністратор, вибираємо останнього активного користувача
+        if user.id == ADMIN_ID:
+            # Знайдемо останнього активного користувача
+            last_active_users = [uid for uid in user_data.keys() if uid != ADMIN_ID]
+            if last_active_users:
+                recipient_id = last_active_users[-1]  # Беремо останнього
+        
+        # Відправляємо повідомлення отримувачу (якщо це не той самий відправник)
+        if recipient_id != user.id:
+            await context.bot.send_message(
+                chat_id=recipient_id,
+                text=f"📝 Отримано анонімне повідомлення:\n\n{message_text}",
+                reply_markup=reply_markup
+            )
     except Exception as e:
-        logger.error(f"Не вдалося переслати повідомлення адміністратору: {e}")
-        print(f"Помилка пересилання повідомлення адміністратору: {e}")
+        logger.error(f"Не вдалося переслати повідомлення: {e}")
+        print(f"Помилка пересилання повідомлення: {e}")
         
         # Повідомляємо користувача про помилку
         await update.message.reply_text(
@@ -122,57 +169,90 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
     
     # Отримуємо дані кнопки
     data = query.data
+    user = update.effective_user
     
     # Якщо це кнопка для відповіді
     if data.startswith("reply_"):
-        user_id = int(data.split("_")[1])
+        message_id = data.split("_")[1]
         
-        # Запам'ятовуємо, кому відповідаємо
-        context.user_data["reply_to"] = user_id
+        if message_id not in messages_data:
+            await query.edit_message_text("⚠️ Це повідомлення більше недоступне.")
+            return ConversationHandler.END
+        
+        # Запам'ятовуємо, на яке повідомлення відповідаємо
+        context.user_data["reply_to_msg"] = message_id
         
         # Запитуємо текст відповіді
         await query.edit_message_text(
-            text=f"Введіть текст відповіді для користувача ID: {user_id}\n\n"
-                 f"Останнє повідомлення: {user_data.get(user_id, {}).get('last_message', 'Немає')}"
+            text=f"💬 Введіть текст анонімної відповіді:\n\n"
+                 f"На повідомлення: {messages_data[message_id]['text'][:50]}..."
         )
         
         return AWAITING_REPLY
     
     return ConversationHandler.END
 
-async def admin_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
-    """Обробка відповіді адміністратора."""
-    # Перевіряємо, чи це адміністратор
-    if update.effective_user.id != ADMIN_ID:
-        await update.message.reply_text("❌ Ця функція доступна тільки адміністратору.")
-        return ConversationHandler.END
-    
+async def process_reply(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
+    """Обробка відповіді користувача."""
+    user = update.effective_user
     reply_text = update.message.text
-    reply_to_id = context.user_data.get("reply_to")
+    message_id = context.user_data.get("reply_to_msg")
     
-    if not reply_to_id:
-        await update.message.reply_text("❌ Не вдалося визначити, кому відповідати.")
+    if not message_id or message_id not in messages_data:
+        await update.message.reply_text("❌ Не вдалося визначити, на яке повідомлення відповідаєте.")
         return ConversationHandler.END
     
-    # Надсилаємо відповідь користувачу
+    # Знаходимо ID відправника оригінального повідомлення
+    original_sender_id = messages_data[message_id]['sender_id']
+    
+    # Зберігаємо цю відповідь як нове повідомлення
+    new_message_id = await get_message_id()
+    messages_data[new_message_id] = {
+        'sender_id': user.id,
+        'text': reply_text,
+        'in_reply_to': message_id,
+        'timestamp': update.message.date
+    }
+    
+    # Створюємо кнопку для відповіді на це повідомлення
+    keyboard = [
+        [InlineKeyboardButton("Відповісти анонімно", callback_data=f"reply_{new_message_id}")]
+    ]
+    reply_markup = InlineKeyboardMarkup(keyboard)
+    
+    # Надсилаємо відповідь відправнику оригінального повідомлення
     try:
         await context.bot.send_message(
-            chat_id=reply_to_id,
-            text=f"📨 Відповідь від адміністратора:\n\n{reply_text}"
+            chat_id=original_sender_id,
+            text=f"📨 Відповідь на ваше повідомлення:\n"
+                 f"▶️ Ваше повідомлення: {messages_data[message_id]['text'][:50]}...\n\n"
+                 f"📝 Відповідь: {reply_text}",
+            reply_markup=reply_markup
         )
         
-        # Підтверджуємо адміністратору
-        user_info = f"ID: {reply_to_id}"
-        if reply_to_id in user_data:
-            user = user_data[reply_to_id]
-            user_info = f"ID: {reply_to_id}, Ім'я: {user.get('first_name', 'Немає')}, Юзернейм: @{user.get('username', 'Немає')}"
-        
+        # Підтверджуємо відправнику відповіді
         await update.message.reply_text(
-            f"✅ Вашу відповідь успішно надіслано користувачу:\n{user_info}"
+            f"✅ Вашу анонімну відповідь успішно надіслано."
         )
         
-        logger.info(f"ВІДПОВІДЬ: Адміністратор відповів користувачу {reply_to_id}: {reply_text}")
-        print(f"ВІДПОВІДЬ: Адміністратор відповів користувачу {reply_to_id}: {reply_text}")
+        # Логуємо відповідь
+        logger.info(f"ВІДПОВІДЬ: Користувач ID:{user.id} відповів на повідомлення ID:{message_id}")
+        print(f"ВІДПОВІДЬ: Користувач ID:{user.id} відповів на повідомлення ID:{message_id}")
+        
+        # Також повідомляємо адміна про нову відповідь (якщо відправник не адмін)
+        if user.id != ADMIN_ID and original_sender_id != ADMIN_ID:
+            user_info = f"ID: {user.id}"
+            if user.id in user_data:
+                user_info = f"ID: {user.id}, Ім'я: {user_data[user.id].get('first_name', 'Немає')}, Юзернейм: @{user_data[user.id].get('username', 'Немає')}"
+            
+            await context.bot.send_message(
+                chat_id=ADMIN_ID,
+                text=f"📬 Нова анонімна відповідь!\n\n"
+                     f"Інформація про відправника (конфіденційно):\n{user_info}\n\n"
+                     f"На повідомлення: {messages_data[message_id]['text'][:50]}...\n\n"
+                     f"Текст відповіді: {reply_text}",
+                reply_markup=reply_markup
+            )
     except Exception as e:
         logger.error(f"Не вдалося надіслати відповідь: {e}")
         print(f"Помилка надсилання відповіді: {e}")
@@ -191,30 +271,41 @@ async def help_command(update: Update, context: ContextTypes.DEFAULT_TYPE) -> No
         "📌 Команди бота:\n\n"
         "/start - Запустити бота\n"
         "/help - Показати це повідомлення\n\n"
-        "Просто надішліть текстове повідомлення, і воно буде анонімно переслано адміністратору."
+        "Просто надішліть текстове повідомлення, щоб відправити його анонімно.\n"
+        "Ви можете відповідати на анонімні повідомлення, натиснувши кнопку 'Відповісти анонімно'."
     )
     
     # Додаємо інформацію для адміністратора
     if update.effective_user.id == ADMIN_ID:
         help_text += (
-            "\n\n👑 Команди адміністратора:\n"
-            "Ви можете відповідати на анонімні повідомлення, натиснувши кнопку 'Відповісти анонімно'"
+            "\n\n👑 Інформація для адміністратора:\n"
+            "Ви бачите конфіденційну інформацію про всіх відправників."
         )
     
     await update.message.reply_text(help_text)
 
+@flask_app.route(f'/{TOKEN}', methods=['POST'])
+def webhook():
+    """Обробник вебхуків для Flask."""
+    return 'OK'
+
+@flask_app.route('/')
+def index():
+    """Проста сторінка для перевірки, що сервер працює."""
+    return 'Бот працює!'
+
 def main() -> None:
     """Головна функція бота."""
-    print("Бот готовий до роботи. Натисніть Ctrl+C для завершення.")
+    print("Бот готовий до роботи в режимі webhook. Чекаємо вебхуки...")
     
     # Створення додатку
     application = Application.builder().token(TOKEN).build()
     
-    # Створюємо ConversationHandler для відповідей адміністратора
+    # Створюємо ConversationHandler для відповідей
     conv_handler = ConversationHandler(
         entry_points=[CallbackQueryHandler(button_callback)],
         states={
-            AWAITING_REPLY: [MessageHandler(filters.TEXT & ~filters.COMMAND, admin_reply)],
+            AWAITING_REPLY: [MessageHandler(filters.TEXT & ~filters.COMMAND, process_reply)],
         },
         fallbacks=[CommandHandler("cancel", cancel)],
         per_message=True,
@@ -226,8 +317,25 @@ def main() -> None:
     application.add_handler(conv_handler)
     application.add_handler(MessageHandler(filters.TEXT & ~filters.COMMAND, receive_message))
     
-    # Запуск бота
-    application.run_polling()
+    # Налаштування webhook
+    print(f"Налаштування webhook на {WEBHOOK_URL}/{TOKEN}")
+    application.run_webhook(
+        listen="0.0.0.0",
+        port=PORT,
+        url_path=TOKEN,
+        webhook_url=f"{WEBHOOK_URL}/{TOKEN}"
+    )
 
 if __name__ == "__main__":
+    # Запуск бота в режимі webhook через асинхронну петлю
+    from threading import Thread
+    
+    def run_flask():
+        flask_app.run(host='0.0.0.0', port=PORT)
+    
+    # Запускаємо Flask у окремому потоці
+    flask_thread = Thread(target=run_flask)
+    flask_thread.start()
+    
+    # Запускаємо бота
     main()
