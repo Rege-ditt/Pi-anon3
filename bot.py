@@ -92,9 +92,10 @@ async def receive_message(update: Update, context: ContextTypes.DEFAULT_TYPE) ->
         "⚠️ На жаль, функція відповіді на надіслане Вам анонімне повідомлення зараз недоступна😭."
     )
     
-    keyboard = [
-        [InlineKeyboardButton("Відповісти анонімно", callback_data=f"reply_{user.id}")]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+   keyboard = [
+    [InlineKeyboardButton("Відповісти анонімно", callback_data=f"reply_{user.id}")]
+]  # Закриваємо список
+reply_markup = InlineKeyboardMarkup(keyboard)
     
     try:
         await context.bot.send_message(
